@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>JWT Toolkit — Generate & Debug</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsrsasign"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        display: flex;
+        overflow: hidden;
+      }
+      .container {
+        display: flex;
+        width: 100%;
+        height: 100vh;
+      }
+      .panel {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+      }
+      .divider {
+        width: 2px;
+        background-color: #ccc;
+        height: 100vh;
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 24px;
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-top: 15px;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+      textarea,
+      input {
+        width: 100%;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 14px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        resize: vertical;
+      }
+      textarea {
+        min-height: 100px;
+      }
+      button {
+        margin-top: 15px;
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        background-color: #007bff;
+        border: none;
+        color: white;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      pre {
+        background: #f7f7f7;
+        padding: 15px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-top: 10px;
+        min-height: 100px;
+      }
+      /* Scrollbar for panels */
+      .panel::-webkit-scrollbar {
+        width: 8px;
+      }
+      .panel::-webkit-scrollbar-thumb {
+        background-color: #ccc;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- LEFT PANEL: JWT Generator -->
+      <div class="panel" id="generator-panel">
+        <h1>JWT Generator</h1>
+
+        <label for="gen-payload">Payload (JSON):</label>
+        <textarea id="gen-payload" rows="8" spellcheck="false">
+{
+  "userId": 123,
+  "name": "John Doe"
+}
+      </textarea
+        >
+
+        <label for="gen-secret">Secret Key:</label>
+        <input
+          type="text"
+          id="gen-secret"
+          value="mysecret123"
+          spellcheck="false"
+        />
+        <label for="gen-exp">Expiration time (seconds):</label>
+        <input type="number" id="gen-exp" value="3600" min="1" />
+        <button onclick="generateJWT()">Generate JWT</button>
+
+        <label for="gen-output">Generated JWT Token:</label>
+        <pre id="gen-output"></pre>
+      </div>
+
+
+      <div class="divider"></div>
+
+      <!-- RIGHT PANEL: JWT Debugger -->
+      <div class="panel" id="debugger-panel">
+        <h1>JWT Debugger</h1>
+
+        <label for="dec-token">JWT Token:</label>
+        <textarea
+          id="dec-token"
+          rows="8"
+          spellcheck="false"
+          placeholder="Paste your JWT token here..."
+        ></textarea>
+
+        <label for="dec-secret">Secret Key:</label>
+        <input
+          type="text"
+          id="dec-secret"
+          value="mysecret123"
+          spellcheck="false"
+        />
+
+        <button onclick="debugJWT()">Decode & Verify</button>
+
+        <h3>Decoded Header</h3>
+        <pre id="dec-header"></pre>
+
+        <h3>Decoded Payload</h3>
+        <pre id="dec-payload"></pre>
+
+        <h3>Verification Result</h3>
+        <pre id="dec-status"></pre>
+      </div>
+    </div>
+
+    <script>
+      // JWT Generator using jsrsasign
+      function generateJWT() {
+        const payloadText = document.getElementById("gen-payload").value.trim();
+        const secret = document.getElementById("gen-secret").value.trim();
+        const expSeconds = Number(
+          document.getElementById("gen-exp").value.trim()
+        );
+        const output = document.getElementById("gen-output");
+
+        try {
+          const payloadObj = JSON.parse(payloadText);
+
+          const now = Math.floor(Date.now() / 1000);
+          payloadObj.iat = now;
+          payloadObj.exp = now + expSeconds;
+
+          const header = { alg: "HS256", typ: "JWT" };
+          const sHeader = JSON.stringify(header);
+          const sPayload = JSON.stringify(payloadObj);
+
+          const sJWT = KJUR.jws.JWS.sign("HS256", sHeader, sPayload, secret);
+          output.textContent = sJWT;
+        } catch (err) {
+          output.textContent = "Error: " + err.message;
+        }
+      }
+
+      // JWT Debugger using SubtleCrypto
+      async function debugJWT() {
+        // Clear previous outputs
+        const headerEl = document.getElementById("dec-header");
+        const payloadEl = document.getElementById("dec-payload");
+        const statusEl = document.getElementById("dec-status");
+        headerEl.textContent = "";
+        payloadEl.textContent = "";
+        statusEl.textContent = "";
+
+        const token = document.getElementById("dec-token").value.trim();
+        const secret = document.getElementById("dec-secret").value.trim();
+
+        const parts = token.split(".");
+        if (parts.length !== 3) {
+          statusEl.textContent = "❌ Invalid JWT format";
+          return;
+        }
+
+        try {
+          const header = JSON.parse(atob(parts[0]));
+          const payload = JSON.parse(atob(parts[1]));
+
+          headerEl.textContent = JSON.stringify(header, null, 2);
+         
+
+          let payloadText = JSON.stringify(payload, null, 2);
+
+          // Check expiration
+          if (payload.exp) {
+            const now = Math.floor(Date.now() / 1000);
+            if (now >= payload.exp) {
+              // Append red expired warning
+              payloadText += "\n\n%TOKEN_EXPIRED%"; 
+            }
+          }
+
+          // Replace %TOKEN_EXPIRED% with red styled text using innerHTML
+          payloadEl.innerHTML = payloadText.replace(
+            "%TOKEN_EXPIRED%",
+            '<span style="color: red; font-weight: bold;">⚠️ Token expired</span>'
+          );
+
+          // Verify signature
+          const encoder = new TextEncoder();
+          const key = await window.crypto.subtle.importKey(
+            "raw",
+            encoder.encode(secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["verify"]
+          );
+
+          const signatureBytes = Uint8Array.from(
+            atob(parts[2].replace(/-/g, "+").replace(/_/g, "/")),
+            (c) => c.charCodeAt(0)
+          );
+
+          const data = encoder.encode(parts[0] + "." + parts[1]);
+
+          const valid = await window.crypto.subtle.verify(
+            "HMAC",
+            key,
+            signatureBytes,
+            data
+          );
+
+          statusEl.textContent = valid
+            ? "✅ Signature Verified"
+            : "❌ Signature Invalid";
+        } catch (err) {
+          statusEl.textContent = "❌ Error: " + err.message;
+        }
+      }
+    </script>
+    <footer
+      style="
+        width: 100%;
+        padding: 12px 20px;
+        background: #f0f0f0;
+        text-align: center;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        font-size: 14px;
+        box-shadow: 0 -1px 5px rgba(0, 0, 0, 0.1);
+      "
+    >
+      <a
+        href="https://www.linkedin.com/in/alan-m1"
+        target="_blank"
+        rel="noopener"
+        style="
+          margin-right: 20px;
+          color: #0077b5;
+          text-decoration: none;
+          font-weight: bold;
+        "
+        >LinkedIn</a
+      >
+      <a
+        href="https://github.com/Alanm17"
+        target="_blank"
+        rel="noopener"
+        style="color: #333; text-decoration: none; font-weight: bold"
+        >GitHub</a
+      >
+    </footer>
+  </body>
+</html>
